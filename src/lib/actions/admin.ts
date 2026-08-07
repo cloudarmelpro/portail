@@ -12,7 +12,7 @@ import {
   utilisateurParCourriel,
 } from '@/lib/data/admin'
 import { ErreurMetier } from '@/lib/erreurs'
-import { LIBELLE_ROLE, type Role } from '@/lib/permissions'
+import { estAdministrateur, LIBELLE_ROLE, type Role } from '@/lib/permissions'
 import { createAction, createActionCloisonnee } from '@/lib/safe-action'
 import {
   nouvelleCleLogo,
@@ -155,7 +155,7 @@ export const changerRole = createAction({
     }
 
     const cible = await compteVise(entree.courriel)
-    if (cible.role === 'admin' && entree.role !== 'admin') {
+    if (estAdministrateur(cible.role) && !estAdministrateur(entree.role)) {
       await refuserSiDernierAdministrateur()
     }
 
@@ -183,7 +183,7 @@ export const suspendreCompte = createAction({
     }
 
     const cible = await compteVise(entree.courriel)
-    if (cible.role === 'admin') await refuserSiDernierAdministrateur()
+    if (estAdministrateur(cible.role)) await refuserSiDernierAdministrateur()
 
     /**
      * Un compte n'est JAMAIS supprimé, seulement suspendu : une suppression

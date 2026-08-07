@@ -123,6 +123,21 @@ export const LIBELLE_ROLE: Readonly<Record<Role, string>> = {
   heures: 'Gestion des heures',
 }
 
+/**
+ * Le rôle d'administrateur, nommé UNE fois.
+ *
+ * Quatre endroits comparaient `role === 'admin'` à la main, tous pour la même
+ * règle : il doit rester un administrateur actif. La règle nomme légitimement un
+ * rôle — ce n'est pas une garde d'accès, qui passerait par une permission — mais
+ * quatre littéraux dispersés finissent par diverger, et l'invariant est écrit
+ * sans exception : aucun rôle codé en dur hors de ce fichier.
+ */
+export function estAdministrateur(role: Role | string | null): boolean {
+  // Accepte une chaîne ou `null` : le rôle d'un compte lu en base est une colonne
+  // texte, et la règle doit pouvoir se poser dessus sans le valider d'abord.
+  return role === 'admin'
+}
+
 export const LIBELLE_MODULE: Readonly<Record<Module, string>> = {
   crm: 'CRM',
   cv: 'Banque de CV',

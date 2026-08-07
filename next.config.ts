@@ -73,7 +73,23 @@ const nextConfig: NextConfig = {
    * Rappel de déploiement : copier `.next/static` et `public/` DANS le dossier
    * standalone — Next ne les y place pas.
    */
-  output: 'standalone',
+  /*
+    ────────────────────────────────────────────────────────────────────────────
+    `standalone` SAUF sur Vercel, où il fait échouer la construction.
+
+    Vercel trace les dépendances lui-même et attend `.next/next-server.js.nft.json`
+    à la fin du build. `standalone` produit à la place un serveur autonome dans
+    `.next/standalone` et n'émet pas ce fichier : l'étape `onBuildComplete` de
+    Vercel s'arrête sur un ENOENT.
+
+    Les deux cibles restent donc servies sans qu'on ait à choisir. La cible du
+    projet est un VPS Hostinger avec Coolify, qui a besoin de `standalone` ; un
+    déploiement d'essai sur Vercel n'a pas à le payer.
+
+    `VERCEL` vaut « 1 » dans leurs conteneurs de construction, jamais ailleurs.
+    ────────────────────────────────────────────────────────────────────────────
+  */
+  ...(process.env.VERCEL ? {} : { output: 'standalone' as const }),
 
   /**
    * `@react-pdf/pdfkit` lit un profil ICC par un chemin construit à l'exécution

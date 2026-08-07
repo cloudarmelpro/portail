@@ -4,7 +4,7 @@ import { PanneauDonnees } from '@/components/shared/panneau-donnees'
 import { derniersClientsCrm, donneesCrm, interactionsRecentesCrm } from '@/lib/data/accueil'
 import { ENTREPRISES } from '@/config/entreprises'
 import { compterClientsActifs } from '@/lib/data/crm'
-import { requireModule } from '@/lib/guards'
+import { requirePermissionEcran } from '@/lib/guards'
 import { prismaCadre } from '@/lib/prisma'
 
 /**
@@ -15,7 +15,7 @@ import { prismaCadre } from '@/lib/prisma'
  * les trois entreprises à la fois ne voit que des nombres.
  */
 export default async function PageCrm() {
-  await requireModule('crm')
+  await requirePermissionEcran('crm:lire')
 
   return (
     /*
@@ -82,7 +82,7 @@ export default async function PageCrm() {
  * mémorisée par requête, le second appel ne coûte rien.
  */
 async function BlocPanneaux() {
-  await requireModule('crm')
+  await requirePermissionEcran('crm:lire')
 
   const [{ panneaux }, derniers, interactions] = await Promise.all([
     donneesCrm(),
@@ -115,7 +115,7 @@ async function BlocPanneaux() {
 
 /** Les trois dossiers et leur nombre de clients actifs. */
 async function BlocDossiers() {
-  await requireModule('crm')
+  await requirePermissionEcran('crm:lire')
 
   const comptes = await Promise.all(
     ENTREPRISES.map((e) => compterClientsActifs(prismaCadre(e.slug))),

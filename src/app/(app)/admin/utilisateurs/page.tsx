@@ -7,6 +7,7 @@ import { TableauUtilisateurs, type LigneUtilisateur } from '@/components/admin/t
 import { EtatVide } from '@/components/shared/etat-vide'
 import { TableauVide } from '@/components/shared/tableau'
 import { listerUtilisateurs } from '@/lib/data/admin'
+import { estAdministrateur } from '@/lib/permissions'
 import { requirePermissionEcran } from '@/lib/guards'
 import { FUSEAU } from '@/config/dates'
 
@@ -59,7 +60,7 @@ export default async function PageUtilisateurs({ searchParams }: PageProps<'/adm
     { libelle: 'Comptes', valeur: String(utilisateurs.length) },
     {
       libelle: 'Administrateurs',
-      valeur: String(utilisateurs.filter((u) => u.role === 'admin').length),
+      valeur: String(utilisateurs.filter((u) => estAdministrateur(u.role)).length),
     },
     { libelle: 'Actifs', valeur: String(utilisateurs.filter((u) => !u.suspendu).length) },
     { libelle: 'Suspendus', valeur: String(utilisateurs.filter((u) => u.suspendu).length) },

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -263,7 +263,9 @@ describe('Le titre n’attend pas les données', () => {
 
     expect(blocs.length).toBeGreaterThan(0)
     for (const { nom, corps } of blocs) {
-      expect(corps, nom).toMatch(/await require(Session|Module)\(/)
+      // N'importe laquelle des gardes de `lib/guards.ts` — session, module ou
+      // permission d'écran. Ce qui compte est qu'il y en ait une.
+      expect(corps, nom).toMatch(/await require\w+\(/)
     }
   })
 })
@@ -356,5 +358,131 @@ describe('Les tris chauds sont couverts par un index', () => {
     // ce dernier remplace la couverture de ses trois filtres.
     expect((sql.match(/^CREATE INDEX/gm) ?? []).length).toBe(7)
     expect(sql).not.toContain('DROP INDEX')
+  })
+})
+
+describe('Aucun bloc suspendu ne reçoit son autorisation en propriété', () => {
+  /*
+    ─────────────────────────────────────────────────────────────────────────
+    La forme faible du motif, et pourquoi elle compte même sans faille ouverte.
+
+    Un composant rendu derrière une frontière de suspension n'a aucune garantie
+    que la garde de sa page ait eu lieu. Recevoir le rôle — ou pire, un booléen
+    d'autorisation déjà calculé — revient à laisser l'appelant trancher à la
+    place de la garde.
+
+    Ce n'est exploitable nulle part aujourd'hui : l'enfant reste rendu dans
+    l'arbre de la même requête, il n'a pas d'identifiant HTTP propre. Mais c'est
+    la forme que le produit a corrigée partout ailleurs, et une règle qui ne
+    tient qu'à trois endroits sur quatre ne tient pas.
+    ─────────────────────────────────────────────────────────────────────────
+  */
+  const ECRANS = [
+    'src/app/(app)/accueil/page.tsx',
+    'src/app/(app)/crm/page.tsx',
+    'src/app/(app)/cv/page.tsx',
+  ]
+
+  it('chaque composant asynchrone d’un écran suspendu porte sa garde', () => {
+    const coupables: string[] = []
+
+    for (const chemin of ECRANS) {
+      const source = lire(chemin)
+      // Toutes les fonctions asynchrones du fichier, pas seulement celles
+      // nommées `Bloc…` : `Liste` et `Appoint` échappaient au balayage.
+      for (const m of source.matchAll(/\nasync function (\w+)/g)) {
+        const corps = source
+          .slice(m.index, m.index + 1500)
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .slice(0, 300)
+        if (!/await require\w+\(/.test(corps)) coupables.push(`${chemin} — ${m[1]}`)
+      }
+    }
+
+    expect(coupables).toEqual([])
+  })
+
+  it('aucune autorisation ne traverse en propriété', () => {
+    // `role={session.role}` et `admin={admin}` faisaient décider l'appelant.
+    for (const chemin of ECRANS) {
+      const source = lire(chemin)
+      expect(source, chemin).not.toMatch(/\brole=\{session\.role\}/)
+      expect(source, chemin).not.toMatch(/\badmin=\{admin\}/)
+    }
+  })
+})
+
+describe('Le rôle d’administrateur est nommé une seule fois', () => {
+  it('aucun littéral hors de la matrice', () => {
+    /*
+      Quatre sites comparaient `role === 'admin'` à la main, tous pour la règle
+      « il doit rester un administrateur actif ». La règle nomme légitimement un
+      rôle — ce n'est pas une garde d'accès — mais quatre littéraux dispersés
+      finissent par diverger.
+
+      La requête de `lib/data/admin.ts` garde le sien : c'est une condition SQL,
+      qui ne peut pas appeler une fonction TypeScript.
+    */
+    const coupables: string[] = []
+
+    for (const chemin of fichiersDeSrc()) {
+      if (chemin === 'src/lib/permissions.ts') continue
+      if (chemin === 'src/lib/data/admin.ts') continue
+      const contenu = lire(chemin).replace(/\/\*[\s\S]*?\*\//g, '')
+      if (/\brole === 'admin'/.test(contenu)) coupables.push(chemin)
+    }
+
+    expect(coupables).toEqual([])
+  })
+
+  it('la fonction accepte une colonne texte', () => {
+    // Le rôle d'un compte lu en base est une chaîne, éventuellement nulle : la
+    // règle doit pouvoir s'y poser sans le valider d'abord.
+    expect(lire('src/lib/permissions.ts')).toContain(
+      'export function estAdministrateur(role: Role | string | null)',
+    )
+  })
+})
+
+/** Liste récursive des fichiers TypeScript de `src`. */
+function fichiersDeSrc(): string[] {
+  const sortie: string[] = []
+
+  const parcourir = (dossier: string) => {
+    if (dossier.startsWith('src/generated')) return
+    for (const e of readdirSync(join(process.cwd(), dossier), { withFileTypes: true })) {
+      const chemin = `${dossier}/${e.name}`
+      if (e.isDirectory()) parcourir(chemin)
+      else if (chemin.endsWith('.ts') || chemin.endsWith('.tsx')) sortie.push(chemin)
+    }
+  }
+
+  parcourir('src')
+  return sortie
+}
+
+describe('Les deux cibles de déploiement coexistent', () => {
+  const CONFIG = lire('next.config.ts')
+
+  it('`standalone` est posé partout SAUF sur Vercel', () => {
+    /*
+      ─────────────────────────────────────────────────────────────────────────
+      Vercel trace les dépendances lui-même et attend `next-server.js.nft.json`
+      à la fin du build. `standalone` produit à la place un serveur autonome dans
+      `.next/standalone` et n'émet pas ce fichier : l'étape `onBuildComplete` de
+      Vercel s'arrête sur un ENOENT, et le déploiement échoue.
+
+      La cible du projet reste un VPS avec Coolify, qui a besoin de
+      `standalone` — un essai sur Vercel n'a pas à le payer.
+      ─────────────────────────────────────────────────────────────────────────
+    */
+    expect(CONFIG).toContain("process.env.VERCEL ? {} : { output: 'standalone' as const }")
+  })
+
+  it('la condition lit la variable que Vercel pose, pas une autre', () => {
+    // `VERCEL` vaut « 1 » dans leurs conteneurs de construction, jamais ailleurs.
+    // `NODE_ENV` ou `CI` seraient vrais chez Coolify aussi.
+    expect(CONFIG).toContain('process.env.VERCEL')
+    expect(CONFIG).not.toMatch(/output:\s*'standalone'\s*,/)
   })
 })

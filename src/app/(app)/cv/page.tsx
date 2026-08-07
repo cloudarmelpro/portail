@@ -23,7 +23,7 @@ import {
 } from '@/lib/data/cv'
 import { LIBELLE_VUE_CV, VUES_RESERVEES, estVueCv, type VueCv } from '@/config/cv'
 import { requireModule } from '@/lib/guards'
-import { aPermission, type Role } from '@/lib/permissions'
+import { aPermission } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 
 const dateFr = new Intl.DateTimeFormat('fr-CA', { dateStyle: 'medium' })
@@ -168,13 +168,13 @@ export default async function PageBanqueCv({ searchParams }: PageProps<'/cv'>) {
 
             <div className="mt-4">
               <Suspense fallback={null}>
-                <Liste role={session.role} recherche={recherche} dossier={ouvert} vue={active} />
+                <Liste recherche={recherche} dossier={ouvert} vue={active} />
               </Suspense>
             </div>
           </div>
 
           <Suspense fallback={null}>
-            <Appoint admin={admin} ouvert={ouvert?.id ?? null} vue={active} />
+            <Appoint ouvert={ouvert?.id ?? null} vue={active} />
           </Suspense>
         </div>
       </div>
@@ -183,6 +183,19 @@ export default async function PageBanqueCv({ searchParams }: PageProps<'/cv'>) {
 }
 
 async function BlocCategories() {
+  /*
+    La garde est REFAITE ici, et le rôle en vient.
+
+    Ce composant est rendu séparément de sa page, derrière une frontière de
+    suspension : rien ne garantirait sinon que la garde ait eu lieu. Recevoir le
+    rôle ou une autorisation en propriété revient à laisser l'appelant trancher à
+    la place de la garde — c'est la forme faible du motif, et c'est celle que le
+    reste du produit a déjà corrigée.
+
+    `sessionCourante` est mémorisée par requête : le second appel ne coûte pas
+    d'aller-retour.
+  */
+  await requireModule('cv')
   const categories = await listerCategories()
   return (
     <GestionCategories
@@ -201,22 +214,47 @@ async function BlocCategories() {
  * préselectionnée, et le dialogue impose de choisir — exigence CV-6.
  */
 async function BlocDepot() {
+  /*
+    La garde est REFAITE ici, et le rôle en vient.
+
+    Ce composant est rendu séparément de sa page, derrière une frontière de
+    suspension : rien ne garantirait sinon que la garde ait eu lieu. Recevoir le
+    rôle ou une autorisation en propriété revient à laisser l'appelant trancher à
+    la place de la garde — c'est la forme faible du motif, et c'est celle que le
+    reste du produit a déjà corrigée.
+
+    `sessionCourante` est mémorisée par requête : le second appel ne coûte pas
+    d'aller-retour.
+  */
+  await requireModule('cv')
   const categories = await listerCategories()
   return <BoutonDepot categories={categories.map((c) => ({ id: c.id, nom: c.nom }))} />
 }
 
 /** Ce que la vue demandée montre. La corbeille a son propre tableau. */
 async function Liste({
-  role,
   recherche,
   dossier,
   vue,
 }: {
-  role: Role
   recherche?: string
   dossier: { id: string; nom: string } | null
   vue: VueCv
 }) {
+  /*
+    La garde est REFAITE ici, et le rôle en vient.
+
+    Ce composant est rendu séparément de sa page, derrière une frontière de
+    suspension : rien ne garantirait sinon que la garde ait eu lieu. Recevoir le
+    rôle ou une autorisation en propriété revient à laisser l'appelant trancher à
+    la place de la garde — c'est la forme faible du motif, et c'est celle que le
+    reste du produit a déjà corrigée.
+
+    `sessionCourante` est mémorisée par requête : le second appel ne coûte pas
+    d'aller-retour.
+  */
+  const session = await requireModule('cv')
+  const role = session.role
   const admin = aPermission(role, 'cv:supprimer')
 
   if (!dossier && vue === 'corbeille') {
@@ -322,15 +360,22 @@ async function Liste({
  * Les comptes partent en parallèle : une cascade ferait quatre allers-retours
  * successifs vers Neon là où un seul temps de latence suffit.
  */
-async function Appoint({
-  admin,
-  ouvert,
-  vue,
-}: {
-  admin: boolean
-  ouvert: string | null
-  vue: VueCv
-}) {
+async function Appoint({ ouvert, vue }: { ouvert: string | null; vue: VueCv }) {
+  /*
+    La garde est REFAITE ici, et le rôle en vient.
+
+    Ce composant est rendu séparément de sa page, derrière une frontière de
+    suspension : rien ne garantirait sinon que la garde ait eu lieu. Recevoir le
+    rôle ou une autorisation en propriété revient à laisser l'appelant trancher à
+    la place de la garde — c'est la forme faible du motif, et c'est celle que le
+    reste du produit a déjà corrigée.
+
+    `sessionCourante` est mémorisée par requête : le second appel ne coûte pas
+    d'aller-retour.
+  */
+  const session = await requireModule('cv')
+  const admin = aPermission(session.role, 'cv:supprimer')
+
   const [categories, tous, nonClasses, echeance] = await Promise.all([
     listerCategories(),
     compterTous(),
