@@ -1,0 +1,92 @@
+// Tables de Better Auth — noyau plus extension du module d'administration.
+//
+// Le champ `role` reste une chaîne : c'est ce qu'attend le module admin de
+// Better Auth. Les valeurs autorisées sont définies une seule fois dans
+// `lib/permissions.ts`, qui est la source unique du système de rôles.
+//
+// Il n'y a pas d'inscription libre : seul l'administrateur crée les comptes.
+// Un compte n'est jamais supprimé, seulement suspendu (`banned`) — une
+// suppression ferait disparaître l'auteur des entrées du journal d'audit.
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Module d'administration
+  role       String?
+  banned     Boolean?  @default(false)
+  banReason  String?
+  banExpires DateTime?
+
+  /// Écrite à l'ouverture de session, par un hook de Better Auth.
+  ///
+  /// La déduire du maximum de `Session.createdAt` paraissait suffisant et ne
+  /// l'était pas : les sessions expirent au bout de deux heures et finissent
+  /// purgées. Un compte actif depuis des mois affichait alors « Jamais
+  /// connecté » — l'administrateur aurait suspendu un compte en service.
+  derniereConnexionLe DateTime?
+
+  sessions  Session[]
+  accounts  Account[]
+  auditLogs AuditLog[]
+
+  @@index([role])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Usurpation d'identité par un administrateur, à des fins de dépannage.
+  impersonatedBy String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}

@@ -1,0 +1,119 @@
+// CRM — voir cahier-des-charges.MD, section 6.
+//
+// ─────────────────────────────────────────────────────────────────────────
+// MODÈLES CLOISONNÉS. `Client` et `Interaction` figurent dans
+// `MODELES_CLOISONNES` (lib/prisma.ts) : toute requête passe par
+// `prismaCadre(slug)`, qui injecte la condition d'entreprise.
+// ─────────────────────────────────────────────────────────────────────────
+//
+// `Interaction` porte sa PROPRE colonne `entrepriseSlug`, dupliquée depuis son
+// client. Ce n'est pas une redondance décorative : l'extension de cloisonnement
+// filtre sur une colonne du modèle interrogé. Sans elle, lire les interactions
+// par `clientId` échapperait au cadrage — et le jour où un identifiant de
+// client fuite d'un dossier à l'autre, rien ne l'arrêterait.
+
+enum TypeClient {
+  particulier
+  entreprise
+}
+
+/// Les cinq statuts de suivi (exigence CRM-5). Libellés d'interface dans
+/// `config/crm.ts` — la base stocke des identifiants, jamais du français.
+enum StatutClient {
+  prospect
+  contacte
+  soumission_envoyee
+  gagne
+  perdu
+}
+
+enum TypeInteraction {
+  appel
+  courriel
+  visite
+  soumission
+}
+
+model Client {
+  id             String @id @default(cuid())
+  entrepriseSlug String
+
+  type TypeClient
+  /// Nom complet pour un particulier, raison sociale pour une entreprise.
+  nom  String
+
+  personneRessource String?
+  courriel          String?
+  telephone         String?
+  adresse           String?
+  provenance        String?
+  notes             String?
+
+  statut StatutClient @default(prospect)
+
+  /// Le passage à Gagné ou Perdu exige une confirmation et un motif
+  /// (exigence CRM-5). Le motif est conservé : « pourquoi avons-nous perdu
+  /// celui-là » est la seule question que ce champ sert à répondre.
+  motifCloture String?
+  clotureLe    DateTime?
+
+  interactions Interaction[]
+  estimations  Estimation[]
+
+  deletedAt DateTime?
+  version   Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entrepriseSlug, deletedAt])
+  @@index([entrepriseSlug, statut])
+  @@index([entrepriseSlug, nom])
+  /// L'entrée du CRM montre les cinq derniers clients ouverts, dossier par
+  /// dossier. Sans cet index, Postgres trie le dossier ENTIER pour en rendre
+  /// cinq — trois fois par affichage. Aucun autre index ne couvre `createdAt`.
+  @@index([entrepriseSlug, createdAt])
+  @@map("client")
+}
+
+model Interaction {
+  id             String @id @default(cuid())
+  /// Dupliqué depuis le client — voir la note d'en-tête.
+  entrepriseSlug String
+
+  clientId String
+  type     TypeInteraction
+  date     DateTime
+  resume   String
+
+  /// Prochaine action prévue et sa date (exigence CRM-4). C'est cette date qui
+  /// alimente le tableau de bord des relances : à faire aujourd'hui, en retard.
+  prochaineAction   String?
+  prochaineActionLe DateTime? @db.Date
+
+  auteurId  String?
+  auteurNom String
+
+  /// Une estimation enregistrée au dossier apparaît dans la chronologie avec
+  /// son montant (exigence EST-9). La relation part d'ici pour que la
+  /// chronologie reste une seule liste, homogène et triable par date.
+  estimationId String? @unique
+
+  deletedAt DateTime?
+  version   Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client     Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  estimation Estimation? @relation(fields: [estimationId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, date])
+  @@index([entrepriseSlug, prochaineActionLe])
+  @@index([entrepriseSlug, deletedAt])
+  /// Même raison que sur `Client` : le panneau des interactions récentes trie
+  /// par date décroissante avec une limite de cinq. `[clientId, date]` ne sert
+  /// pas — la lecture ne fixe aucun client.
+  @@index([entrepriseSlug, date])
+  @@map("interaction")
+}

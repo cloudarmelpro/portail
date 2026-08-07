@@ -1,26 +1,484 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ═══════════════════════════════════════════════════════════════
+   Jetons de design — architecture.MD, section 19.
+
+   Ce fichier est la SEULE source de couleur du projet. Aucun hex brut
+   ailleurs dans le code : tout passe par ces variables.
+
+   Le mode sombre est construit, jamais obtenu par inversion.
+   ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  /* ── Surfaces et encre ── */
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --raised: #ffffff;
+  --border: rgb(11 11 11 / 0.1);
+  --border-strong: rgb(11 11 11 / 0.18);
+  --ink: #0b0b0b;
+  --ink2: #52514e;
+  /* ── Encre tertiaire ──
+     Elle valait #898781, soit 3,41:1 sur --page et 3,50:1 sur --surface — sous
+     le seuil AA de 4,5:1. Or ce jeton porte du texte de 11 et 13 px partout :
+     en-têtes de colonnes, libellés de rôle, dates secondaires, métadonnées de
+     fiche. C'est le texte le plus petit du produit, et c'était le moins lisible.
+
+     #726f6a mesure 4,75:1 et 4,87:1. Il reste franchement plus clair que
+     --ink2, donc la hiérarchie visuelle tient. Le mode sombre, lui, passait
+     déjà à 5,42:1 : seul le thème clair change. */
+  --ink3: #726f6a;
+
+  /* ── Action principale ──
+     Volontairement neutre : elle n'appartient à aucune des trois entreprises. */
+  --action: #0b0b0b;
+  --action-ink: #ffffff;
+
+  /* ── Entreprises ──
+     Repères d'identité, JAMAIS des surfaces. Filet de 3 px ou pastille de 8 px,
+     toujours accompagnés du nom écrit.
+     Validées par calcul : séparation daltonienne ΔE 9,2 · vision normale ΔE 24,0.
+     Le vert mesure 2,74:1 sur fond clair — sous le seuil. Acceptable uniquement
+     parce que la couleur n'est jamais seule. */
+  --pays: #1baf7a;
+  --dev: #2a78d6;
+  --staff: #eb6834;
+
+  /* ── États ──
+     Réservés aux états. Toujours avec une icône ET un mot, jamais la couleur seule. */
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+
+  /*
+    La teinte d'état ÉCRITE — jamais `--critical` brut sur du texte.
+
+    `#d03b3b` mesure 3,27:1 sur `--raised` en sombre : sous le seuil AA de 4,5:1
+    pour un texte de 13 px. Il portait pourtant « Suspendu », « En retard » et
+    tous les messages de validation du produit, y compris celui de l'écran de
+    connexion — le seul écran atteignable sans session.
+
+    Le mélange est celui de `badge-statut.tsx`, qui avait résolu le problème
+    dans son coin : 55 % de teinte vers `--ink`. La couleur reste reconnaissable,
+    et l'icône à côté garde la teinte pure, où le seuil n'est que de 3:1.
+  */
+  --critical-texte: color-mix(in srgb, var(--critical) 55%, var(--ink));
+
+  /*
+    `--warning` pur mesure 1,83:1 sur `--raised` en clair : très en dessous des
+    3:1 qu'exige un élément d'interface porteur de sens. En sombre il monte à
+    8,57:1 ; le jeton dérivé existe quand même des deux côtés, sans quoi la même
+    classe changerait de sens d'un thème à l'autre. Sur la grille des heures,
+    le triangle de dépassement était presque invisible, et le mot qui le double
+    est en légende, en bas de l'écran — hors du champ où l'œil travaille.
+
+    Même mélange que `--critical-texte`. La teinte pure reste pour les surfaces
+    à 13 % des badges, où elle ne porte rien à elle seule.
+  */
+  --warning-texte: color-mix(in srgb, var(--warning) 55%, var(--ink));
+
+  /*
+    `--serious` pur mesure 2,50 à 2,64:1 en CLAIR — sous le seuil de 3:1 exigé
+    même pour une icône. En sombre il monte à 6:1 et n'a besoin de rien.
+
+    Ses deux frères avaient déjà leur variante mélangée ; celui-là n'en avait pas,
+    et c'est pourquoi il traînait en teinte pure sur des icônes de 14 px.
+  */
+  --serious-texte: color-mix(in srgb, var(--serious) 55%, var(--ink));
+
+  /* Voile des surfaces plein écran. Le même dans les deux thèmes : il assombrit
+     ce qui est derrière, il ne suit pas le fond. */
+  --voile: rgb(0 0 0 / 0.6);
+
+  /* ── Séries de graphique — ACHROMATIQUES ──
+     Elles valaient auparavant exactement `--dev` et `--staff` : sur la fiche
+     d'un employé de Staff augmentation, la pastille d'entreprise et le segment
+     « heures supplémentaires » portaient le même orange avec deux sens.
+
+     Le gris n'est pas un pis-aller. Une couleur d'entreprise est saturée, une
+     couleur de série ne l'est jamais : aucune valeur de gris ne peut être
+     confondue avec l'une des trois teintes, sous aucune déficience de la vision
+     des couleurs — une déficience comprime les teintes, elle n'en ajoute pas.
+     La garantie survivra à une quatrième entreprise.
+
+     Les deux séries sont d'ailleurs ORDINALES, pas catégorielles : les heures
+     supplémentaires ne sont pas une autre espèce d'heures, ce sont les
+     dernières de la semaine. Une variation d'intensité le dit plus juste qu'un
+     changement de teinte. Voir architecture.MD, section 19. */
+  --s1: #55534d;
+  --s2: #938f85;
+
+  --hover: rgb(11 11 11 / 0.04);
+  --hover2: rgb(11 11 11 / 0.08);
+
+  /* ── Creux ──
+     Le fond dans lequel un objet repose : la pastille d'un contrôle segmenté,
+     les rangées d'un panneau d'accueil. Il lui faut sa propre valeur : --hover
+     est un ÉTAT, réservé à ce que le pointeur touche, et l'employer ici ferait
+     paraître survolé un fond qui ne l'est jamais. */
+  --rail: #f3f3f2;
+
+  /* ── Quadrillage ──
+     Décor de l'écran de connexion. Plus pâle que --border : il couvre toute la
+     page, et un filet qui se lit ligne à ligne devient une trame de papier
+     millimétré. Un dégradé radial l'efface sur les bords. */
+  --grid: rgb(11 11 11 / 0.05);
+
+  /* ── Ombres ──
+     Deux, pas trois. Les cartes n'en ont aucune : le filet de bordure suffit. */
+  --sh-menu: 0 4px 16px rgb(11 11 11 / 0.08);
+  --sh-modal: 0 16px 48px rgb(11 11 11 / 0.16);
+
+  /* ── Document imprimé ──
+     Échappe délibérément au thème : un devis ou un CV est du papier, toujours clair. */
+  --pdf-paper: #ffffff;
+  --pdf-ink: #111111;
+  --pdf-ink2: #4a4a4a;
+  --pdf-rule: #ececec;
+
+  --radius: 10px;
+
+  /**
+   * Police du produit — DM Sans, chargée par `next/font` dans `app/layout.tsx`,
+   * qui définit `--font-dm-sans` et sert le fichier depuis notre origine.
+   *
+   * Cal Sans occupait cette place et n'a jamais été rendue : elle était déclarée
+   * en `@font-face` vers `/fonts/CalSans.woff2`, un fichier jamais déposé. Le
+   * produit tournait donc depuis le début sur la pile de repli du système —
+   * différente d'un poste à l'autre, et jamais celle du système de design.
+   *
+   * La pile qui suit reste utile : elle couvre le temps du chargement et le cas
+   * où la police échoue.
+   */
+  --font-produit:
+    var(--font-dm-sans), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* ── Alias shadcn ──
+     Les composants de components/ui/ raisonnent avec ces noms. Les pointer vers
+     nos jetons leur fait porter notre système sans les modifier à la main. */
+  --background: var(--page);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--action);
+  --primary-foreground: var(--action-ink);
+  --secondary: var(--hover);
+  --secondary-foreground: var(--ink);
+  --muted: var(--hover);
+  --muted-foreground: var(--ink3);
+  --accent: var(--hover);
+  --accent-foreground: var(--ink);
+  --destructive: var(--critical);
+  /* Le seul alias qui ne pointe pas sur un jeton produit, et il DOIT exister des
+     deux côtés. Il valait --border : 1,24:1 sur --raised, alors qu'il peint le
+     bord des champs et la piste d'un interrupteur éteint — porteurs de sens, donc
+     3:1. À 46 % d'encre : bord 3,24:1 sur --raised, et le pouce clair garde
+     3,08:1 sur la piste. --border reste souple, un filet de carte est décoratif. */
+  --input: rgb(11 11 11 / 0.46);
+  --ring: var(--ink);
+  --chart-1: var(--s1);
+  --chart-2: var(--s2);
+  --chart-3: var(--ink3);
+  --chart-4: var(--ink2);
+  --chart-5: var(--border-strong);
+  --sidebar: var(--page);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--action);
+  --sidebar-primary-foreground: var(--action-ink);
+  --sidebar-accent: var(--hover);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ink);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --raised: #232322;
+  --border: rgb(255 255 255 / 0.1);
+  --border-strong: rgb(255 255 255 / 0.18);
+  --ink: #ffffff;
+  --ink2: #c3c2b7;
+  /* #898781 mesurait 4,38:1 sur --raised — sous les 4,5:1 d'un texte, alors que
+     --raised est justement la surface des rangées de liste en creux et des
+     cartes, où ce jeton porte du 11 et du 13 px. #8f8d86 : 4,74:1 sur --raised,
+     5,59:1 sur --rail, 5,24:1 sur --surface. */
+  --ink3: #8f8d86;
+
+  --action: #ffffff;
+  --action-ink: #0b0b0b;
+
+  --pays: #199e70;
+  --dev: #3987e5;
+  --staff: #d95926;
+
+  /* Les couleurs d'état ne bougent pas : elles restent lisibles sur les deux fonds. */
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  /*
+    Plus clair qu'en clair, et c'est le seul jeton d'état dans ce cas.
+
+    #d03b3b mesure 4,80:1 sur le blanc du thème clair, mais seulement 3,27:1 sur
+    `--raised` en sombre — et 2,43:1 dès qu'un voile de survol s'y ajoute, comme
+    sur une case de la grille des heures. Le seuil d'un élément graphique est de
+    3:1, et ce filet est ce qui identifie une saisie invalide.
+
+    #ec5f5f rend 4,12:1 sur `--raised` et 3,54:1 sous deux voiles empilés.
+    `--critical-texte` en dérive et reste au-dessus de 7,6:1.
+  */
+  --critical: #ec5f5f;
+
+  /*
+    La teinte d'état ÉCRITE — jamais `--critical` brut sur du texte.
+
+    `#d03b3b` mesure 3,27:1 sur `--raised` en sombre : sous le seuil AA de 4,5:1
+    pour un texte de 13 px. Il portait pourtant « Suspendu », « En retard » et
+    tous les messages de validation du produit, y compris celui de l'écran de
+    connexion — le seul écran atteignable sans session.
+
+    Le mélange est celui de `badge-statut.tsx`, qui avait résolu le problème
+    dans son coin : 55 % de teinte vers `--ink`. La couleur reste reconnaissable,
+    et l'icône à côté garde la teinte pure, où le seuil n'est que de 3:1.
+  */
+  --critical-texte: color-mix(in srgb, var(--critical) 55%, var(--ink));
+
+  /*
+    `--warning` pur mesure 1,83:1 sur `--raised` en clair : très en dessous des
+    3:1 qu'exige un élément d'interface porteur de sens. En sombre il monte à
+    8,57:1 ; le jeton dérivé existe quand même des deux côtés, sans quoi la même
+    classe changerait de sens d'un thème à l'autre. Sur la grille des heures,
+    le triangle de dépassement était presque invisible, et le mot qui le double
+    est en légende, en bas de l'écran — hors du champ où l'œil travaille.
+
+    Même mélange que `--critical-texte`. La teinte pure reste pour les surfaces
+    à 13 % des badges, où elle ne porte rien à elle seule.
+  */
+  --warning-texte: color-mix(in srgb, var(--warning) 55%, var(--ink));
+
+  /*
+    `--serious` pur mesure 2,50 à 2,64:1 en CLAIR — sous le seuil de 3:1 exigé
+    même pour une icône. En sombre il monte à 6:1 et n'a besoin de rien.
+
+    Ses deux frères avaient déjà leur variante mélangée ; celui-là n'en avait pas,
+    et c'est pourquoi il traînait en teinte pure sur des icônes de 14 px.
+  */
+  --serious-texte: color-mix(in srgb, var(--serious) 55%, var(--ink));
+
+  /* Voile des surfaces plein écran. Le même dans les deux thèmes : il assombrit
+     ce qui est derrière, il ne suit pas le fond. */
+  --voile: rgb(0 0 0 / 0.6);
+
+  /* Séries achromatiques — l'ordre s'inverse en sombre : la série principale
+     doit rester la plus contrastée contre le fond.
+
+     --s2 valait #6e6a61, réglé contre --surface (3,23:1). Mais le graphique est
+     dessiné sur --raised, où il tombait à 2,92:1 — sous les 3:1 d'un objet
+     graphique. #726e65 mesure 3,10:1, et l'écart à --s1 reste de 2,4. */
+  --s1: #b5b1a6;
+  --s2: #726e65;
+
+  --hover: rgb(255 255 255 / 0.05);
+  --hover2: rgb(255 255 255 / 0.1);
+
+  /* En sombre, le creux est plus FONCÉ que la surface, pas plus clair : c'est
+     lui qui recule, et ce qui repose dedans ne se détache que d'un fond
+     enfoncé. */
+  --rail: #131313;
+
+  /* Légèrement plus opaque qu'en clair : un blanc à 5 % sur #0d0d0d disparaît. */
+  --grid: rgb(255 255 255 / 0.055);
+
+  --sh-menu: 0 4px 16px rgb(0 0 0 / 0.45);
+  --sh-modal: 0 16px 48px rgb(0 0 0 / 0.6);
+
+  /* Contrepartie sombre de --input — voir la raison en clair. 42 % de blanc :
+     bord 3,95:1 sur --raised, et la piste éteinte, que switch.tsx pose à 80 %,
+     3,03:1. Sans lui, l'alias hériterait de --border et la piste retomberait à
+     1,27:1 : un interrupteur du même gris que la carte qui le porte. */
+  --input: rgb(255 255 255 / 0.42);
+
+  /* Les jetons de document ne changent pas : le papier reste blanc. */
 }
 
 @theme inline {
+  /* Nos jetons, utilisables directement : bg-surface, text-ink2, border-border… */
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-border-strong: var(--border-strong);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink2);
+  --color-ink3: var(--ink3);
+  --color-action: var(--action);
+  --color-action-ink: var(--action-ink);
+  --color-pays: var(--pays);
+  --color-dev: var(--dev);
+  --color-staff: var(--staff);
+  --color-good: var(--good);
+  --color-warning: var(--warning);
+  --color-serious: var(--serious);
+  --color-critical: var(--critical);
+  --color-critical-texte: var(--critical-texte);
+  --color-serious-texte: var(--serious-texte);
+  --color-warning-texte: var(--warning-texte);
+  --color-voile: var(--voile);
+  --color-s1: var(--s1);
+  --color-s2: var(--s2);
+  --color-hover: var(--hover);
+  --color-hover2: var(--hover2);
+  --color-rail: var(--rail);
+  --color-pdf-paper: var(--pdf-paper);
+  --color-pdf-ink: var(--pdf-ink);
+  --color-pdf-ink2: var(--pdf-ink2);
+  --color-pdf-rule: var(--pdf-rule);
+
+  /* Alias shadcn */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--font-produit);
+  --font-heading: var(--font-produit);
+
+  --shadow-menu: var(--sh-menu);
+  --shadow-modal: var(--sh-modal);
+
+  /* Rayons — 6 champs et boutons · 10 cartes · 16 modales · plein pilules */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  /* Superposition — aucune valeur hors de cette échelle.
+     Un 9999 quelque part signifie qu'elle a été contournée. */
+  --z-index-sticky: 10;
+  --z-index-sidebar: 20;
+  --z-index-header: 30;
+  --z-index-menu: 40;
+  --z-index-veil: 50;
+  --z-index-modal: 60;
+  --z-index-toast: 70;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply bg-page text-ink;
+  }
+
+  body {
+    /* DM Sans porte un axe de taille optique : les formes se resserrent dans les
+       tableaux denses et s'ouvrent dans les grands titres, sans réglage. */
+    font-optical-sizing: auto;
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  /* Anneau de focus sur tout élément interactif : c'est la seule façon
+     d'utiliser l'application au clavier. */
+  *:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+
+  /*
+    Une exception, et une seule : les champs de TEXTE.
+
+    Le curseur clignotant y dit déjà où l'on est — c'est même le repère le plus
+    précis qui soit, puisqu'il indique la position dans le texte et pas seulement
+    le champ. L'anneau s'y ajoutait sans rien apprendre, et il apparaissait au
+    CLIC, là où personne ne l'attend.
+
+    L'exception s'arrête là. Un `<select>`, une case, un bouton, un lien n'ont
+    aucun curseur : sans anneau, on ne sait plus où l'on est en tabulant. Les
+    cases et les boutons radio sont donc exclus explicitement, bien qu'ils
+    soient des `input`.
+
+    Déclarée ICI plutôt qu'en `outline-none` sur chaque champ : dix-huit
+    fichiers portaient la classe, et c'est ainsi qu'elle avait fini par
+    supprimer l'anneau partout, y compris là où il fallait le garder.
+  */
+  input:not([type='checkbox']):not([type='radio']):focus-visible,
+  textarea:focus-visible {
+    outline: none;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+  Barre de chargement — voir `components/shared/barre-chargement.tsx`.
+
+  Elle avance vite, ralentit, puis s'arrête à 94 % : la durée réelle n'est pas
+  connue, et une barre qui atteint 100 % avant l'arrivée du contenu ment. Elle
+  disparaît quand `loading.tsx` cède la place, sans jamais se remplir.
+
+  `forwards` : sous `prefers-reduced-motion`, la règle ci-dessus ramène la durée
+  à 0,01 ms et l'animation saute directement à sa dernière image — une barre
+  fixe à 94 %, visible, plutôt qu'un trait invisible resté à zéro.
+*/
+@keyframes barre-chargement {
+  0% {
+    transform: scaleX(0);
+  }
+  40% {
+    transform: scaleX(0.55);
+  }
+  75% {
+    transform: scaleX(0.82);
+  }
+  100% {
+    transform: scaleX(0.94);
+  }
 }

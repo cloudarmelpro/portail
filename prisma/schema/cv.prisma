@@ -1,0 +1,82 @@
+// Banque de CV — modèle de gestionnaire de fichiers, pas de suivi de candidatures.
+//
+// Le client a été explicite : « c'est comme un Google Drive ». Il n'y a donc ni
+// statut de candidat, ni pipeline de recrutement, ni notes d'entrevue.
+//
+// Le module sert au recrutement offshore de l'activité Staff augmentation, avec
+// des catégories par poste. Voir cahier-des-charges.MD, section 4.
+
+model CategorieCv {
+  id String @id @default(cuid())
+
+  /// ─────────────────────────────────────────────────────────────────────
+  /// PAS de `@unique` sur le nom, et c'est un compromis assumé.
+  ///
+  /// Une catégorie supprimée garde sa ligne (TR-9). Avec une contrainte
+  /// d'unicité pleine, elle garderait aussi son nom pour toujours : supprimer
+  /// « Designer » interdirait d'en recréer une. Postgres saurait l'exprimer par
+  /// un index unique partiel, mais Prisma ne sait pas le déclarer — l'écrire à
+  /// la main dans la migration créerait une dérive permanente entre le schéma
+  /// et la base.
+  ///
+  /// L'unicité parmi les catégories VIVANTES est donc portée par
+  /// `categorieParNom` dans `lib/data/cv.ts`, et `tests/cv-categories.spec.ts`
+  /// vérifie que les deux actions concernées la consultent.
+  /// ─────────────────────────────────────────────────────────────────────
+  nom   String
+  ordre Int    @default(0)
+
+  fichiers FichierCv[] @relation("FichierCategories")
+
+  /// TR-9 — la structure de classement ne disparaît pas non plus. Les fichiers
+  /// basculent en « Non classé », mais la catégorie reste restaurable.
+  deletedAt      DateTime?
+  supprimeParNom String?
+
+  /// TR-10 — deux onglets qui renomment la même catégorie.
+  version Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deletedAt, ordre])
+  @@index([nom])
+  @@map("categorie_cv")
+}
+
+model FichierCv {
+  id String @id @default(cuid())
+
+  /// Nom d'origine, restitué au téléchargement.
+  nom String
+
+  /// Clé dans le stockage objet — identifiant ALÉATOIRE, jamais le nom du
+  /// candidat. Une clé nominative ferait fuiter un renseignement personnel dans
+  /// les journaux du fournisseur et les traces réseau.
+  cle String @unique
+
+  taille   Int
+  typeMime String
+
+  /// Étiquettes, pas dossiers exclusifs : un candidat polyvalent appartient à
+  /// plusieurs catégories sans que le fichier soit dupliqué. À l'écran, elles se
+  /// présentent comme des dossiers — c'est le modèle mental du client.
+  categories CategorieCv[] @relation("FichierCategories")
+
+  deposeParId  String?
+  deposeParNom String
+  deposeLe     DateTime @default(now())
+
+  /// Suppression réversible — corbeille de 30 jours (exigence CV-9).
+  deletedAt      DateTime?
+  supprimeParNom String?
+
+  /// Contrôle de concurrence : deux onglets qui reclassent le même fichier ne
+  /// doivent pas s'écraser en silence.
+  version Int @default(0)
+
+  @@index([deletedAt])
+  @@index([deposeLe])
+  @@index([nom])
+  @@map("fichier_cv")
+}

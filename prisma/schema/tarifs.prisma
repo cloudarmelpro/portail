@@ -1,0 +1,106 @@
+// Grilles de tarifs — voir cahier-des-charges.MD, exigences ADM-2 et ADM-3.
+//
+// MODÈLES CLOISONNÉS : `GrilleTarifs` et `ProduitTarif` figurent dans
+// `MODELES_CLOISONNES`. Chaque entreprise a ses propres produits et unités ;
+// la mécanique de calcul, elle, est commune (exigence EST-5).
+//
+// Une grille n'est JAMAIS modifiée en place. Enregistrer produit une nouvelle
+// version horodatée, et l'ancienne reste consultable. C'est ce qui rend
+// vérifiable l'affirmation « cette estimation appliquait bien le tarif de
+// mars » — sans quoi elle ne serait qu'une supposition.
+
+model GrilleTarifs {
+  id             String @id @default(cuid())
+  entrepriseSlug String
+
+  /// Numéro de version affiché à l'écran, séquentiel par entreprise. À ne pas
+  /// confondre avec les colonnes `version` des autres modèles, qui servent au
+  /// contrôle de concurrence : ici, la version EST la donnée.
+  numero Int
+
+  /// Une seule grille active par entreprise — celle que le calculateur propose.
+  /// Les autres restent lisibles au titre de l'historique.
+  actif Boolean @default(false)
+
+  /// Écarts avec la version précédente, calculés à l'enregistrement et figés.
+  /// Les recalculer à l'affichage donnerait un historique qui change quand on
+  /// modifie le passé ; ici, l'historique dit ce qu'il a vu.
+  ecarts String[]
+
+  creeParId  String?
+  creeParNom String
+
+  produits ProduitTarif[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([entrepriseSlug, numero])
+  @@index([entrepriseSlug, actif])
+  @@map("grille_tarifs")
+}
+
+model ProduitTarif {
+  id             String @id @default(cuid())
+  /// Dupliqué depuis la grille : sans cette colonne, l'extension de
+  /// cloisonnement n'aurait rien sur quoi mordre lors d'une lecture par
+  /// `grilleId`.
+  entrepriseSlug String
+
+  grilleId String
+
+  nom          String
+  unite        String
+  prixUnitaire Decimal @db.Decimal(12, 2)
+
+  /// Un produit retiré du catalogue reste dans la grille, marqué inactif : il
+  /// figure dans des estimations passées, et le faire disparaître rendrait
+  /// leur relecture incompréhensible.
+  actif Boolean @default(true)
+  ordre Int     @default(0)
+
+  grille GrilleTarifs @relation(fields: [grilleId], references: [id], onDelete: Cascade)
+
+  @@index([grilleId, ordre])
+  @@index([entrepriseSlug])
+  @@map("produit_tarif")
+}
+
+/// Coordonnées d'une entreprise — en-tête du document remis au client (EST-10).
+///
+/// ─────────────────────────────────────────────────────────────────────────
+/// UNE ligne par entreprise. Il y en a bien TROIS.
+///
+/// Le point a été tranché avec le client : Paysagement, Développement web et
+/// Staff augmentation sont trois entreprises séparées, trois dossiers distincts
+/// dès le départ — ce que dit le cahier des charges depuis sa première page.
+/// Chacune a donc sa raison sociale, son adresse et son téléphone.
+///
+/// Ces valeurs étaient inventées et codées en dur : trois raisons sociales
+/// déduites d'un prénom, la même adresse pour les trois, des numéros en « 555 ».
+/// Elles vivent ici pour que le client les saisisse et les corrige seul, sans
+/// déploiement — au même titre que les grilles de tarifs (ADM-2).
+///
+/// Cloisonné, comme le reste de ce fichier : l'écran d'administration passe par
+/// le client cadré, une entreprise à la fois.
+/// ─────────────────────────────────────────────────────────────────────────
+model Organisation {
+  entrepriseSlug String @id
+
+  raisonSociale String @default("")
+  adresse       String @default("")
+  telephone     String @default("")
+
+  /// Clé du logo dans le stockage objet — en-tête du document remis au client.
+  ///
+  /// La CLÉ et non une URL : une adresse signée expire au bout de cinq minutes,
+  /// et une adresse permanente ferait servir le fichier par un lien direct, ce
+  /// que TR-3 interdit pour tout le stockage. Nulle tant qu'aucun logo n'est
+  /// déposé — le document porte alors la marque écrite.
+  logoCle String?
+
+  /// TR-10 — deux onglets qui corrigent l'adresse en même temps.
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("organisation")
+}

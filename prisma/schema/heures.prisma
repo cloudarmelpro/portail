@@ -1,0 +1,151 @@
+// Suivi des heures — voir cahier-des-charges.MD, section 5.
+//
+// Le module n'est PAS cloisonné par entreprise, à la différence du CRM et du
+// calculateur : la gérante saisit en une seule grille les heures de tous les
+// employés, toutes entreprises confondues (exigence HEU-2). L'entreprise est
+// ici un attribut de regroupement et d'export, pas une frontière d'accès.
+// C'est pourquoi aucun de ces modèles ne figure dans `MODELES_CLOISONNES`.
+
+model Employe {
+  id  String @id @default(cuid())
+  nom String
+
+  /// Rattachement — sert au regroupement et à l'export, jamais au filtrage
+  /// d'accès. Voir la note d'en-tête.
+  entrepriseSlug String
+
+  /// Facultatif : sans taux renseigné, seules les heures sont totalisées et
+  /// aucun montant n'est affiché (exigence HEU-8). Un taux à zéro dirait
+  /// « travaille gratuitement », ce qui n'est pas la même chose qu'inconnu.
+  tauxHoraire Decimal? @db.Decimal(8, 2)
+
+  /// Un employé parti reste inactif plutôt que supprimé : ses heures passées
+  /// appartiennent au registre de paie, conservé six ans (exigence TR-6).
+  actif Boolean @default(true)
+
+  notes String?
+
+  saisies     SaisieJour[]
+  corrections CorrectionHeures[]
+
+  deletedAt DateTime?
+  version   Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([actif, nom])
+  @@index([entrepriseSlug])
+  @@index([deletedAt])
+  @@map("employe")
+}
+
+model SaisieJour {
+  id        String @id @default(cuid())
+  employeId String
+
+  /// Colonne DATE et non TIMESTAMP : une heure saisie le lundi doit rester au
+  /// lundi. Avec un horodatage, le décalage entre le fuseau du serveur (UTC) et
+  /// celui du Québec ferait basculer les saisies du matin sur la veille — un
+  /// bogue silencieux qui ne se voit qu'à la clôture de la période.
+  date DateTime @db.Date
+
+  /// Total du jour. Jamais un flottant : les quarts d'heure s'additionnent
+  /// soixante fois par semaine, et 0,1 + 0,2 ≠ 0,3 en virgule flottante.
+  heures Decimal @db.Decimal(4, 2)
+
+  /// La gestion des congés est hors périmètre : une note sur l'entrée du jour
+  /// suffit à documenter une absence (cahier des charges, section 5.3).
+  note String?
+
+  employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Une seule saisie par employé et par jour — la grille est un tableau, pas
+  /// un journal. La contrainte porte l'unicité au niveau de la base, là où deux
+  /// onglets ouverts ne peuvent pas la contourner.
+  @@unique([employeId, date])
+  @@index([date])
+  @@map("saisie_jour")
+}
+
+model PeriodePaie {
+  id String @id @default(cuid())
+
+  debut DateTime @db.Date
+  fin   DateTime @db.Date
+
+  /// Après clôture, la grille passe en lecture seule (exigence HEU-10). Une
+  /// correction reste possible, mais par la voie explicite : motif obligatoire
+  /// et trace nominative.
+  cloturee       Boolean   @default(false)
+  clotureeLe     DateTime?
+  clotureeParNom String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version   Int      @default(0)
+
+  @@unique([debut, fin])
+  @@index([cloturee, debut])
+  @@map("periode_paie")
+}
+
+model CorrectionHeures {
+  id String @id @default(cuid())
+
+  employeId String
+  date      DateTime @db.Date
+
+  /// Nulle si la correction crée une saisie qui n'existait pas — un samedi
+  /// oublié. Distinguer « était à zéro » de « n'existait pas » évite de faire
+  /// dire au journal ce qu'il ne sait pas.
+  ancienneValeur Decimal? @db.Decimal(4, 2)
+  nouvelleValeur Decimal  @db.Decimal(4, 2)
+
+  /// ─────────────────────────────────────────────────────────────────────
+  /// NULLE pour une modification ordinaire de la grille.
+  ///
+  /// Cette table ne consignait que les corrections d'après clôture, qui exigent
+  /// une justification (HEU-10). Avant clôture, vider une cellule SUPPRIMAIT la
+  /// ligne : la valeur antérieure n'existait plus nulle part, et une fausse
+  /// manœuvre sur « Copier la semaine précédente » effaçait une semaine entière
+  /// sans retour possible. TR-9 interdit la disparition définitive.
+  ///
+  /// Elle porte donc désormais TOUT changement de valeur. Un motif signale une
+  /// correction justifiée ; son absence, une saisie courante. L'écran des
+  /// corrections ne montre que les premières.
+  /// ─────────────────────────────────────────────────────────────────────
+  motif     String?
+  parId     String?
+  parNom    String
+  createdAt DateTime @default(now())
+
+  employe Employe @relation(fields: [employeId], references: [id], onDelete: Cascade)
+
+  @@index([employeId, date])
+  @@index([createdAt])
+  @@map("correction_heures")
+}
+
+/// Paramètres de paie — ligne unique. Le seuil d'heures supplémentaires, la
+/// majoration et la durée de la période sont paramétrables (exigences HEU-7 et
+/// HEU-9) : les normes changent, et une constante dans le code obligerait à un
+/// déploiement pour suivre une décision du législateur.
+model ParametresPaie {
+  id String @id @default("global")
+
+  /// Norme québécoise : 40 heures, majoration à 1,5 fois le taux.
+  seuilSupplementaires Decimal @default(40) @db.Decimal(4, 2)
+  majoration           Decimal @default(1.5) @db.Decimal(4, 2)
+
+  /// Période de paie aux deux semaines par défaut.
+  joursPeriode Int @default(14)
+
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("parametres_paie")
+}

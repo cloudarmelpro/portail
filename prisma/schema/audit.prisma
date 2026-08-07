@@ -1,0 +1,41 @@
+// Journal d'audit — alimenté par la fabrique d'actions, donc jamais oublié.
+//
+// Ce n'est pas une commodité : dès lors que l'application manipule des
+// renseignements personnels, être capable de dire qui a consulté quoi et quand
+// est une obligation. Voir `cahier-des-charges.MD`, exigence TR-5.
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // `utilisateurNom` est dénormalisé volontairement : le journal doit rester
+  // lisible même si le compte est suspendu ou renommé. La relation sert aux
+  // filtres, pas à l'affichage.
+  userId         String?
+  utilisateurNom String
+
+  action         String
+  entite         String?
+  module         String
+  entrepriseSlug String?
+
+  // Actions à surveiller : téléchargement et suppression de CV, changement de rôle.
+  sensible Boolean @default(false)
+
+  ip String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  /// C'est la SEULE table du produit qui grossit sans plafond : rien ne l'élague,
+  /// et c'est voulu — un journal qu'on purge n'est plus une preuve.
+  ///
+  /// Les trois index à une colonne ne servaient que le filtre, jamais le tri qui
+  /// l'accompagne toujours. Chaque écran du journal filtre PUIS ordonne par date
+  /// décroissante : sans la date dans l'index, Postgres trie le résultat entier
+  /// avant de le paginer.
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([module, createdAt])
+  @@index([sensible, createdAt])
+  @@map("audit_log")
+}

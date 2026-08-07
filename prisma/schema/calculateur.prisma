@@ -1,0 +1,142 @@
+// Calculateur d'estimations — voir cahier-des-charges.MD, section 7.
+//
+// MODÈLES CLOISONNÉS : les trois figurent dans `MODELES_CLOISONNES`.
+//
+// ─────────────────────────────────────────────────────────────────────────
+// Une estimation émise est FIGÉE (exigence EST-12).
+// ─────────────────────────────────────────────────────────────────────────
+// C'est la raison d'être de presque toutes les colonnes de ce fichier. Une
+// ligne ne référence pas un produit : elle en RECOPIE le libellé, l'unité et le
+// prix. Les taux de taxe sont recopiés eux aussi. Une estimation relue dans
+// deux ans doit afficher ce que le client a reçu, pas ce que les tarifs
+// d'aujourd'hui produiraient — sans quoi le document ne prouve rien.
+
+enum StatutEstimation {
+  brouillon
+  envoye
+  accepte
+  refuse
+  expire
+}
+
+model Estimation {
+  id             String @id @default(cuid())
+  entrepriseSlug String
+
+  /// Numérotation séquentielle par entreprise et par année (exigence EST-10).
+  /// `reference` est la forme affichée — « PAY-2026-014 ». Elle est STOCKÉE et
+  /// non recalculée : le préfixe d'une entreprise peut changer, une estimation
+  /// déjà transmise au client ne le peut pas.
+  annee     Int
+  numero    Int
+  reference String @unique
+
+  /// Facultatif, et c'est tout l'outil : on calcule pendant l'appel, on
+  /// rattache ensuite (exigence EST-6). Pendant un appel de qualification, le
+  /// client n'existe souvent pas encore dans le CRM.
+  clientId String?
+
+  statut StatutEstimation @default(brouillon)
+
+  lignes LigneEstimation[]
+
+  /// Ajustements (exigence EST-2). Rabais en montant OU en pourcentage : les
+  /// deux existent dans l'usage, et convertir l'un en l'autre à la saisie
+  /// perdrait l'intention.
+  fraisDeplacement Decimal @default(0) @db.Decimal(12, 2)
+  majorationPct    Decimal @default(0) @db.Decimal(6, 3)
+  rabaisMontant    Decimal @default(0) @db.Decimal(12, 2)
+  rabaisPct        Decimal @default(0) @db.Decimal(6, 3)
+
+  /// Totaux calculés par le domaine pur (`lib/domaine/estimation.ts`) puis
+  /// persistés. Les recalculer à la lecture rouvrirait la porte que EST-12
+  /// ferme.
+  sousTotal Decimal @db.Decimal(12, 2)
+  tps       Decimal @db.Decimal(12, 2)
+  tvq       Decimal @db.Decimal(12, 2)
+  total     Decimal @db.Decimal(12, 2)
+
+  /// Taux appliqués, recopiés à l'émission. Le taux de la TVQ a déjà changé
+  /// trois fois depuis 2011.
+  tauxTps Decimal @db.Decimal(7, 5)
+  tauxTvq Decimal @db.Decimal(7, 5)
+
+  /// Grille de tarifs utilisée — trace, jamais dépendance de calcul.
+  grilleId String?
+
+  /// Validité de 30 jours par défaut (exigence EST-13). Alimente la tuile
+  /// « estimations expirant sous sept jours » du tableau de bord CRM.
+  valideJusquau DateTime? @db.Date
+
+  /// Date d'émission. Tant qu'elle est nulle, l'estimation est un brouillon
+  /// modifiable ; une fois posée, le document est figé.
+  emiseLe DateTime?
+
+  /// Duplication (exigence EST-11) : le cas le plus fréquent est la révision.
+  /// L'original n'est jamais modifié — on en crée une copie et on garde le lien.
+  origineId String?
+
+  creeParId  String?
+  creeParNom String
+
+  deletedAt DateTime?
+  version   Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client      Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  interaction Interaction?
+
+  @@unique([entrepriseSlug, annee, numero])
+  @@index([entrepriseSlug, statut])
+  @@index([entrepriseSlug, valideJusquau])
+  @@index([clientId])
+  @@index([deletedAt])
+  /// La liste des estimations filtre sur le dossier et les vivantes, puis trie
+  /// par création décroissante. Aucun index existant ne couvre cette
+  /// combinaison : le tri portait sur toutes les estimations du dossier.
+  @@index([entrepriseSlug, deletedAt, createdAt])
+  /// Les soumissions en attente et celles qui périment : même filtre par statut,
+  /// même tri par date de validité. `[entrepriseSlug, statut]` s'arrête avant le
+  /// tri, `[entrepriseSlug, valideJusquau]` avant le filtre.
+  @@index([entrepriseSlug, statut, valideJusquau])
+  @@map("estimation")
+}
+
+model LigneEstimation {
+  id             String @id @default(cuid())
+  entrepriseSlug String
+
+  estimationId String
+
+  /// Recopiés depuis le produit, jamais référencés — voir la note d'en-tête.
+  designation  String
+  unite        String
+  prixUnitaire Decimal @db.Decimal(12, 2)
+
+  /// Trois décimales : on facture 2,25 heures ou 0,125 hectare.
+  quantite Decimal @db.Decimal(12, 3)
+
+  sousTotal Decimal @db.Decimal(12, 2)
+  ordre     Int     @default(0)
+
+  estimation Estimation @relation(fields: [estimationId], references: [id], onDelete: Cascade)
+
+  @@index([estimationId, ordre])
+  @@map("ligne_estimation")
+}
+
+/// Compteur de numérotation, par entreprise et par année.
+///
+/// Un `max(numero) + 1` calculé à la volée produit des doublons dès que deux
+/// estimations sont créées dans la même seconde. Ici l'incrément est une
+/// écriture atomique sur une ligne unique.
+model SequenceEstimation {
+  entrepriseSlug String
+  annee          Int
+  dernier        Int    @default(0)
+
+  @@id([entrepriseSlug, annee])
+  @@map("sequence_estimation")
+}

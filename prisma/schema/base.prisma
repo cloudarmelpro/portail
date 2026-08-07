@@ -1,0 +1,12 @@
+// Generator et datasource — schéma découpé par domaine dans ce dossier.
+// L'URL de connexion n'est plus déclarée ici en Prisma 7 : elle vit dans
+// `prisma.config.ts`, qui distingue la chaîne avec pool de la chaîne directe.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
